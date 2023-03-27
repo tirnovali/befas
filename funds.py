@@ -10,6 +10,7 @@
 
 # js_script = f"return chartMainContent_FonFiyatGrafik.series[0].data.map(a => {{ return {{ {fund}: a.config,'date': a.category }} }})"
 
+
 bes_funds = [
     "VGA",
     "VGD",
@@ -60,6 +61,5 @@ bes_funds = [
     "TYJ",
 ]
 
-bes_funds_test = ["VGA"]
 
 
