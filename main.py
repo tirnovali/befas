@@ -21,7 +21,6 @@ def retrieve_funds(long_period=False):
     options = Options()
     options.add_argument("--headless=new")
 
-    
     df = None
 
     for idx, fund in enumerate(bes_funds):
@@ -33,7 +32,7 @@ def retrieve_funds(long_period=False):
             lambda d: d.execute_script("return document.readyState") == "complete"
         )
 
-        # click the 3-year radio button to fetch required funds data
+        # click the 3-year radio button for fetching required funds data
         if long_period:
             driver.find_element(By.ID, "MainContent_RadioButtonListPeriod_6").click()
 
@@ -41,15 +40,13 @@ def retrieve_funds(long_period=False):
                 lambda d: d.execute_script("return chartMainContent_FonFiyatGrafik.series[0].data.map(a => a.category).length > 300") == True
             )
 
-        # JUST EXECUTE THE DATE ARRAY LIST SCRIPT FOR ONCE
+        # execute only once 
         if idx == 0:
             dates_array = driver.execute_script(JS_DATES)
             df = pd.DataFrame({"date": dates_array})
 
         values_array = driver.execute_script(JS_VALUES)
-        df[fund] = pd.Series(values_array)
-
-        # df.insert(len(df.columns), fund, values_array)
+        df[fund] = pd.Series(values_array) # put zero or NaN value for the empty fields
 
         driver.close()
 
@@ -62,7 +59,5 @@ def main():
     # tabu_trial = TS("training_tabu_data.xlsx", 2, 3, 0b1000001001010100110000, sector_sd=0.0128, risk_total=40)
     
    
-
-
 if __name__ == "__main__":
     main()
