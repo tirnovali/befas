@@ -1,63 +1,88 @@
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.wait import WebDriverWait
 import pandas as pd
+from playwright.sync_api import TimeoutError as PlaywrightTimeout
+from playwright.sync_api import sync_playwright
+
 from funds import bes_funds
 from portfolio_seek import TS
 
-
-JS_DATES = f"return chartMainContent_FonFiyatGrafik.series[0].data.map(a => a.category)"
-JS_VALUES = f"return chartMainContent_FonFiyatGrafik.series[0].data.map(a => a.config)"
-
-
-"""
-buttonid need to be clicked for gather 3 years data MainContent_RadioButtonListPeriod_6
-
-"""
+JS_DATES = "chartMainContent_FonFiyatGrafik.series[0].data.map(a => a.category)"
+JS_VALUES = "chartMainContent_FonFiyatGrafik.series[0].data.map(a => a.config)"
 
 def retrieve_funds(long_period=False):
-
-    options = Options()
-    options.add_argument("--headless=new")
-
     df = None
+    failed_funds = []
 
-    for idx, fund in enumerate(bes_funds):
-        driver = webdriver.Chrome(options=options)
-        url = f"https://www.tefas.gov.tr/FonAnaliz.aspx?FonKod={fund}"
-        driver.get(url)
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
 
-        WebDriverWait(driver, timeout=10).until(
-            lambda d: d.execute_script("return document.readyState") == "complete"
+        for idx, fund in enumerate(bes_funds):
+            print(f"Processing fund {idx + 1}/{len(bes_funds)}: {fund}")
+
+            try:
+                page = browser.new_page()
+                url = f"https://www.tefas.gov.tr/FonAnaliz.aspx?FonKod={fund}"
+                page.goto(url, timeout=60000)
+
+                # Wait for the chart JavaScript object to be available
+                page.wait_for_function(
+                    "typeof chartMainContent_FonFiyatGrafik !== 'undefined' && chartMainContent_FonFiyatGrafik !== null",
+                    timeout=30000,
+                )
+
+                # click the 3-year radio button for fetching required funds data
+                if long_period:
+                    # Click the 3-year radio button
+                    page.click("#MainContent_RadioButtonListPeriod_6")
+
+                    # Wait for chart data to reload - be more lenient
+                    try:
+                        page.wait_for_function(
+                            "chartMainContent_FonFiyatGrafik.series[0].data.length > 300",
+                            timeout=15000,
+                        )
+                    except PlaywrightTimeout:
+                        # Some funds might have less than 300 data points, that's OK
+                        print(
+                            f"  Warning: {fund} has less than 300 data points or slow to load"
+                        )
+
+                # execute only once - get dates from first fund
+                if idx == 0:
+                    dates_array = page.evaluate(JS_DATES)
+                    df = pd.DataFrame({"date": dates_array})
+
+                values_array = page.evaluate(JS_VALUES)
+                df[fund] = pd.Series(
+                    values_array
+                )  # put zero or NaN value for the empty fields
+                print(f"  Success: {fund} - {len(values_array)} data points")
+
+                page.close()
+
+            except Exception as e:
+                print(f"  Error processing {fund}: {e}")
+                failed_funds.append(fund)
+                try:
+                    page.close()
+                except:
+                    pass
+
+        browser.close()
+
+    if df is not None:
+        df.to_excel("output.xlsx", index=False)
+        print(
+            f"\nData saved to output.xlsx with {len(df)} rows and {len(df.columns)} columns"
         )
 
-        # click the 3-year radio button for fetching required funds data
-        if long_period:
-            driver.find_element(By.ID, "MainContent_RadioButtonListPeriod_6").click()
-
-            WebDriverWait(driver, timeout=10).until(
-                lambda d: d.execute_script("return chartMainContent_FonFiyatGrafik.series[0].data.map(a => a.category).length > 300") == True
-            )
-
-        # execute only once 
-        if idx == 0:
-            dates_array = driver.execute_script(JS_DATES)
-            df = pd.DataFrame({"date": dates_array})
-
-        values_array = driver.execute_script(JS_VALUES)
-        df[fund] = pd.Series(values_array) # put zero or NaN value for the empty fields
-
-        driver.close()
-
-    df.to_excel("output.xlsx", index=False)
+    if failed_funds:
+        print(f"\nFailed funds: {failed_funds}")
 
 
 def main():
-
     retrieve_funds(long_period=True)
     # tabu_trial = TS("training_tabu_data.xlsx", 2, 3, 0b1000001001010100110000, sector_sd=0.0128, risk_total=40)
-    
-   
+
+
 if __name__ == "__main__":
     main()
