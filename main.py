@@ -8,6 +8,7 @@ from portfolio_seek import TS
 JS_DATES = "chartMainContent_FonFiyatGrafik.series[0].data.map(a => a.category)"
 JS_VALUES = "chartMainContent_FonFiyatGrafik.series[0].data.map(a => a.config)"
 
+
 def retrieve_funds(long_period=False):
     df = None
     failed_funds = []
@@ -47,7 +48,7 @@ def retrieve_funds(long_period=False):
                         )
 
                 # execute only once - get dates from first fund
-                if idx == 0:
+                if idx is None:
                     dates_array = page.evaluate(JS_DATES)
                     df = pd.DataFrame({"date": dates_array})
 
